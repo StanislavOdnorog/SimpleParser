@@ -18,65 +18,57 @@ async def fetch(session, url):
 async def parse_catalog(session, url):
     content = await fetch(session, url)
     soup = BeautifulSoup(content, 'html.parser')
-    product_links = [BASE_URL + a['href'] for a in soup.select('.image a')]
-    logging.info(f"Found {len(product_links)} products in catalog.")
-    return product_links
+    catalog_links = [BASE_URL + a['href'] for a in soup.select('.section_item a')]
+    logging.info(f"Found {len(catalog_links)} catalog sections.")
+    return catalog_links
 
 async def parse_pagination(session, url):
     page = 1
-    product_links = []
-    prev_num_links = 48  # TODO: fix hardcode
+    prev_num_links = 48  # Adjust this based on actual pagination behavior
     while True:
         paged_url = f"{url}?PAGEN_1={page}"
         content = await fetch(session, paged_url)
         soup = BeautifulSoup(content, 'html.parser')
+        elements = soup.select('div.inner_wrap')
+
+        if not elements:
+            logging.info(f"No elements found on page {page}. Ending pagination.")
+            break
+
+        for element in elements:
+            title = element.select_one('.item-title').text.strip() if element.select_one('.item-title') else None
+            price_text = element.select_one('.cost > div.price_matrix_wrapper span.price_value').text.strip() if element.select_one('.cost > div.price_matrix_wrapper span.price_value') else "Цена не указана"
+            price = float(price_text.replace('\xa0', '').replace(' ', '')) if price_text != "Цена не указана" else price_text
+            art = element.select_one('.article_block div').text.strip().replace("Арт.:", "").strip() if element.select_one('.article_block div') else None
+            measure = element.select_one('.cost > div.price_matrix_wrapper span.price_measure').text.strip() if element.select_one('.cost > div.price_matrix_wrapper span.price_measure') else "Единица не указана"
+            link = BASE_URL + element.select_one('a.dark_link')['href'] if element.select_one('a.dark_link') else None
+
+            product_info = {
+                "title": title,
+                "price": price,
+                "art": art,
+                "measure": measure,
+                "link": link
+            }
+            logging.info(f"Parsed product: {title}")
+
+            product_data.append(product_info)
+
         new_links = [BASE_URL + a['href'] for a in soup.select('a.thumb')]
-        product_links.extend(new_links)
-        logging.info(f"Found {len(new_links)} products on page {page} of {url}.")
         if len(new_links) < prev_num_links:
             break
         page += 1
-    return product_links
-
-async def parse_product(session, url):
-    retries = 3 
-    for attempt in range(retries):
-        try:
-            content = await fetch(session, url)
-            soup = BeautifulSoup(content, 'html.parser')
-            name = soup.select_one('h1').text.strip()
-            articul = soup.select_one('.left_block span[itemprop="value"]').text.strip()
-            description = ' '.join([div.text.strip() for div in soup.select('.char > div')])
-            image = BASE_URL + soup.select_one('img.product-detail-gallery__picture')['src']
-            product_info = {"name": name, "articul": articul, "description": description, "image": image}
-            logging.info(f"Parsed product: {name}")
-            
-            product_data.append(product_info)
-            break 
-        except Exception as e:
-            logging.error(f"Attempt {attempt + 1}/{retries} failed parsing product at {url}: {e}")
-            if attempt < retries - 1:
-                logging.info(f"Retrying... attempt {attempt + 2}")
-                await asyncio.sleep(2) 
-            else:
-                logging.error(f"All retry attempts exhausted for {url}. Skipping this product.")
-                break
 
 async def main():
     try:
         async with aiohttp.ClientSession() as session:
             catalog_url = f"{BASE_URL}/catalog/"
             logging.info("Starting catalog parsing.")
-            product_links = await parse_catalog(session, catalog_url)
-            all_product_links = []
-            
-            for product_link in product_links:
-                paginated_links = await parse_pagination(session, product_link)
-                all_product_links.extend(paginated_links)
-            
-            logging.info(f"Found a total of {len(all_product_links)} product pages.")
-            tasks = [parse_product(session, link) for link in all_product_links]
-            await asyncio.gather(*tasks)
+            catalog_links = await parse_catalog(session, catalog_url)
+
+            for catalog_link in catalog_links:
+                await parse_pagination(session, catalog_link)
+
     except Exception as e:
         logging.error(f"Error in main function: {e}")
     finally:
