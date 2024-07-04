@@ -36,11 +36,11 @@ async def parse_pagination(session, url):
             break
 
         for element in elements:
-            title = element.select_one('.item-title').text.strip() if element.select_one('.item-title') else None
+            title = element.select_one('.item-title').text.strip() if element.select_one('.item-title') else "Название не указано"
             price_text = element.select_one('.cost > div.price_matrix_wrapper span.price_value').text.strip() if element.select_one('.cost > div.price_matrix_wrapper span.price_value') else "Цена не указана"
             price = float(price_text.replace('\xa0', '').replace(' ', '')) if price_text != "Цена не указана" else price_text
-            art = element.select_one('.article_block div').text.strip().replace("Арт.:", "").strip() if element.select_one('.article_block div') else None
-            measure = element.select_one('.cost > div.price_matrix_wrapper span.price_measure').text.strip() if element.select_one('.cost > div.price_matrix_wrapper span.price_measure') else "Единица не указана"
+            art = element.select_one('.article_block div').text.strip().replace("Арт.:", "").strip() if element.select_one('.article_block div') else "Артикул не указан"
+            measure = element.select_one('.cost > div.price_matrix_wrapper span.price_measure').text.strip().replace("/", "") if element.select_one('.cost > div.price_matrix_wrapper span.price_measure') else "Единица не указана"
             link = BASE_URL + element.select_one('a.dark_link')['href'] if element.select_one('a.dark_link') else None
 
             product_info = {
